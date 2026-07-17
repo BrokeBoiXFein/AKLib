@@ -1,0 +1,98 @@
+/**
+ * AKLib docs — Affogato 2502A theme.
+ * Espresso poured over vanilla gelato: dark coffee browns meeting pale
+ * cream, with a caramel accent. Tokens sourced from the team's
+ * "Affogato 2502A Design System" (tokens/colors.css, fonts.css, etc.).
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  /* ── caramel accent scale ─────────────────────────────── */
+  --ifm-color-primary: #b0703c;          /* caramel */
+  --ifm-color-primary-dark: #9f6536;
+  --ifm-color-primary-darker: #95562a;   /* caramel-deep */
+  --ifm-color-primary-darkest: #7c4a26;
+  --ifm-color-primary-light: #b97e4e;
+  --ifm-color-primary-lighter: #c08a5d;
+  --ifm-color-primary-lightest: #c9a47a; /* latte */
+
+  /* ── cream paper surfaces ─────────────────────────────── */
+  --ifm-background-color: #fbf5ec;                 /* cream-soft */
+  --ifm-background-surface-color: #f4e9d7;         /* cream */
+  --ifm-navbar-background-color: #f4e9d7;
+  --ifm-footer-background-color: #2b1a10;          /* espresso */
+  --ifm-code-background: #eadbc4;                  /* foam */
+  --ifm-pre-background: #2b1a10;                   /* espresso code blocks */
+  --ifm-color-emphasis-300: #d8c4a8;               /* line-strong */
+  --ifm-toc-border-color: #e4d6c0;                 /* line */
+  --ifm-table-border-color: #d8c4a8;
+  --ifm-hr-background-color: #d8c4a8;
+
+  /* ── warm ink text ────────────────────────────────────── */
+  --ifm-font-color-base: #241810;                  /* ink */
+  --ifm-heading-color: #4a2e1c;                    /* coffee */
+  --ifm-color-secondary-contrast-foreground: #6a5746;
+
+  /* ── type ─────────────────────────────────────────────── */
+  --ifm-font-family-base: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  --ifm-heading-font-family: 'Bricolage Grotesque', 'Hanken Grotesk', system-ui, sans-serif;
+  --ifm-font-family-monospace: 'JetBrains Mono', 'Consolas', ui-monospace, monospace;
+  --ifm-heading-font-weight: 700;
+  --ifm-code-font-size: 92%;
+
+  --ifm-global-radius: 8px;                        /* radius-md */
+  --docusaurus-highlighted-code-line-bg: rgba(176, 112, 60, 0.15);
+}
+
+/* Dark mode: the espresso end of the scale, cream text, brighter caramel. */
+[data-theme='dark'] {
+  --ifm-color-primary: #d19660;
+  --ifm-color-primary-dark: #c9884d;
+  --ifm-color-primary-darker: #c08040;
+  --ifm-color-primary-darkest: #b0703c;            /* caramel */
+  --ifm-color-primary-light: #d9a678;
+  --ifm-color-primary-lighter: #e0b389;
+  --ifm-color-primary-lightest: #eadbc4;           /* foam */
+
+  --ifm-background-color: #26170d;
+  --ifm-background-surface-color: #2b1a10;         /* espresso */
+  --ifm-navbar-background-color: #2b1a10;
+  --ifm-footer-background-color: #201108;
+  --ifm-code-background: #3a2617;
+  --ifm-pre-background: #201108;
+  --ifm-color-emphasis-300: #4a2e1c;               /* coffee */
+  --ifm-toc-border-color: #4a2e1c;
+  --ifm-table-border-color: #4a2e1c;
+  --ifm-hr-background-color: #4a2e1c;
+
+  --ifm-font-color-base: #f4e9d7;                  /* cream */
+  --ifm-heading-color: #eadbc4;                    /* foam */
+
+  --docusaurus-highlighted-code-line-bg: rgba(209, 150, 96, 0.18);
+}
+
+/* Headings carry the display voice. */
+h1, h2, h3, h4 {
+  letter-spacing: -0.01em;
+}
+
+/* Admonitions & cards pick up the warm hairline + paper shadow. */
+.alert, .card {
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(43, 26, 16, 0.08), 0 1px 2px rgba(43, 26, 16, 0.05);
+}
+
+/* Navbar wordmark: caramel, display weight. */
+.navbar__title {
+  font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+  font-weight: 800;
+  color: var(--ifm-color-primary);
+  letter-spacing: -0.02em;
+}
+
+/* Sidebar active item: caramel rail, like the notebook's focus ticks. */
+.menu__link--active {
+  border-left: 4px solid var(--ifm-color-primary);
+  border-radius: 0 8px 8px 0;
+}
