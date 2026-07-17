@@ -14,15 +14,14 @@ A motion & tracking library for VEX V5 on [PROS 4](https://pros.cs.purdue.edu/v5
 - **Automated PID tuning** (`autotuneLateral` / `autotuneAngular`) — the robot tunes itself
 - **Tank and holonomic** (X-drive / mecanum) drivetrains behind one interface
 - **1-D motion profiles + feedforward** for repeatable fast motions (`.profiled = true`)
-- **Brain-screen auton selector** (robodash-style tappable cards, SD-card persistence) — see `examples/selector_example.cpp`
+- **Brain-screen auton selector** (robodash-style tappable cards, SD-card persistence) — pre-wired in the template's `main.cpp`
 - **Imperial by default, metric literals built in:** `24_in`, `60_cm`, `1.2_m`, `90_deg`, `1.57_rad`, `1.5_tiles`
 
 ## Installation
 
-1. Create/open a PROS 4 project.
-2. Copy `include/aklib/` into your project's `include/` folder.
-3. Copy `src/aklib/` into your project's `src/` folder.
-4. `#include "aklib/api.hpp"` and fill out `examples/robot_config.cpp` (copy it into your `src/`).
+**Easiest:** open `example-project/` in VS Code with the PROS extension and hit Build — it's a complete, wired template (calibration, auton selector preloaded with the example autons, arcade driver control). Then put your robot's numbers in `src/robot_config.cpp`.
+
+**Into an existing project:** copy `include/aklib/` → your `include/`, `src/aklib/` → your `src/`, plus `examples/robot_config.cpp`, `examples/autons.cpp` (and `autons.hpp` → `include/`); use `examples/main.cpp` as your main or graft from it.
 
 ## 60-second start
 

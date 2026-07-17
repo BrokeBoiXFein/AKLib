@@ -7,6 +7,10 @@ sidebar_position: 9
 
 AKLib ships a brain-screen autonomous selector: EZ-Template's job with a [robodash](https://github.com/unwieldycat/robodash)-style look — a header bar, tappable routine cards with color tags, the current pick highlighted, and the selection **saved to the SD card** so it survives power cycles. Colors follow the Affogato theme.
 
+:::tip Already wired in the template
+If you started from `AKLib/example-project`, all of the setup below is already done in `main.cpp` — the selector appears on boot with the example autons preloaded. This page is for understanding it and swapping in your own routines.
+:::
+
 ## Setup
 
 ```cpp

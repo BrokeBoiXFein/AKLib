@@ -75,7 +75,8 @@ The defaults move most robots safely but every robot needs its own numbers. Two 
 aklib::Chassis chassis(drivetrain, sensors, tunings);
 ```
 
-Then in `main.cpp`:
+The template's `main.cpp` already contains everything below (plus the auton
+selector and driver control) — this is just what it's doing:
 
 ```cpp
 extern aklib::Chassis chassis;

@@ -2,6 +2,7 @@
 # These contain robot-specific configs/tuning and stay local only.
 TestingWattage/
 AkLibTesting/
+AkLibTesting2/
 
 # ── Local tooling config ────────────────────────────────────────────────────
 .impeccable/

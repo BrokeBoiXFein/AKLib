@@ -5,6 +5,7 @@
  */
 
 #include "aklib/api.hpp"
+#include "autons.hpp"
 
 using namespace aklib;
 using namespace aklib::literals;

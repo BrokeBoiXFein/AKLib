@@ -13,11 +13,12 @@ const config = {
     v4: true,
   },
 
-  url: 'https://aklib.example.com',
-  baseUrl: '/',
+  url: 'https://BrokeBoiXFein.github.io',
+  baseUrl: '/AKLib/',
 
-  organizationName: 'aklib',
-  projectName: 'aklib',
+  organizationName: 'BrokeBoiXFein', // GitHub username (owner of the repo)
+  projectName: 'AKLib',              // repo name
+  trailingSlash: false,              // silences the deploy warning; matches Pages
 
   onBrokenLinks: 'throw',
 
