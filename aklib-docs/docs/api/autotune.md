@@ -3,48 +3,67 @@ title: Auto-tuner
 sidebar_position: 6
 ---
 
-# `aklib::autotuneLateral` / `autotuneAngular`
+# `aklib::autotuneAngular` / `autotuneLateral`
 
 Header: `aklib/autotune.hpp`. Usage guide: [Auto-tuning tutorial](../tutorials/auto-tuning).
 
 ```cpp
-AutotuneResult autotuneLateral(Chassis&, const AutotuneOptions& = {});
-AutotuneResult autotuneAngular(Chassis&, const AutotuneOptions& = {});
+AutotuneResult autotuneAngular(Chassis&, double kP, const AutotuneOptions& = {});
+AutotuneResult autotuneLateral(Chassis&, double kP, const AutotuneOptions& = {});
 ```
 
-Both are **blocking** calls that repeatedly run a test motion (lateral: ±`testDistance` shuttle; angular: ±`testAngleDeg` spins), score each run, and coordinate-descend ("twiddle") on kP and kD. Results print to the PROS terminal after every run.
+Both are **blocking** (~30–60 s). You supply kP; the tuner finds kD by bracketing the oscillation boundary (walk kD down from a stable start / up from an oscillating one) and golden-section searching the bracket. Every candidate runs a fixed-duration raw-PID test (alternating direction) and is scored on the full transient. Per-run metrics print to the PROS terminal.
 
 ## AutotuneOptions
 
 | Field | Default | Meaning |
 |---|---|---|
-| `iterations` | 8 | twiddle sweeps (each ≈ 2–4 runs per gain) |
-| `testDistance` | 24 | lateral test length, in |
-| `testAngleDeg` | 90 | angular test size, deg |
-| `runTimeoutMs` | 2500 | per-run cap |
-| `tuneKi` | false | also tune kI (rarely worth it on drivetrains) |
-| `verbose` | true | print per-run telemetry |
-| `overshootWeight` | 40 | scoring: penalty × overshoot² |
-| `settleWeight` | 3 | scoring: penalty × settle seconds |
+| `testMagnitude` | 0 → 90° / 24″ | size of each test motion |
+| `testDurationMs` | 2500 | fixed observation window per run |
+| `settleBetweenMs` | 400 | pause between runs |
+| `kDStart` | 0 → `kP·2` | bracket starting point |
+| `kDMin` / `kDMax` | 0 → `kP·0.5` / `kP·200` | bracket floor / ceiling |
+| `growth` | 1.4 | kD multiplier per bracket step |
+| `refineIters` | 6 | golden-section iterations |
+| `settleTol` | 0.75 | deg/in counted as "at target" |
+| `settleHoldMs` | 150 | continuous ms in band = settled |
+| `ssWindowMs` | 300 | tail window for steady-state error |
+| `overshootTol` | 1.5 | overshoot allowed to count as stable |
+| `oscTol` | 1 | sign-changes allowed to count as stable |
+| `wOvershoot` | 2.0 | cost per deg/in of overshoot (kD too low) |
+| `wOscillation` | 3.0 | cost per oscillation (kD too low) |
+| `wRise` | 2.0 | cost per second of rise time (kD too high) |
+| `wSettle` | 1.0 | cost per second of settle time |
+| `wSteady` | 4.0 | cost per deg/in of steady-state error |
+| `abortCheck` | — | polled kill switch; return `true` to stop |
+| `verbose` | true | per-run terminal output |
 
 ## AutotuneResult
 
 ```cpp
 struct AutotuneResult {
-    PidGains gains;     // best set found — copy into robot_config.cpp
-    double score;       // lower = better (comparable within a session)
-    bool success;       // false only if every run diverged
+    PidGains gains;    // {your kP, kI = 0, best kD found}
+    double cost;       // best cost (comparable within a session)
+    bool aborted;      // kill switch fired; gains hold best-so-far
     int runsExecuted;
 };
 ```
 
-The tuner **never writes gains anywhere** — you assign `result.gains` yourself (to `chassis.tunings().lateral/.angular` for the session, and into `robot_config.cpp` permanently).
+The tuner **never writes gains anywhere** — assign `result.gains` to `chassis.tunings().angular/.lateral` for the session and copy the printed values into `robot_config.cpp` permanently.
 
-## Scoring
+## Per-run metrics (`AutotuneRun`, printed when verbose)
 
-```
-score = ITAE + overshootWeight · overshoot² + settleWeight · settle_seconds
-ITAE  = ∫ t·|error| dt      (punishes error that lingers)
-```
+| Metric | Measures | Penalizes |
+|---|---|---|
+| `overshoot` | max error past the target | kD too low |
+| `oscillations` | error zero-crossings | kD too low |
+| `riseTimeMs` | first reach of the settle band | kD too high (early deceleration) |
+| `settleTimeMs` | entered the band and stayed `settleHoldMs` | slow convergence |
+| `steadyError` | mean \|error\| over the last `ssWindowMs` | stalling short |
 
-Safety: runs whose error exceeds 1.8× the test size are cancelled and scored divergent; gains are clamped ≥ 0; the seed comes from the chassis's current tunings.
+## Notes
+
+- Tests run raw PID → drivetrain with **no slew and no exit conditions**; the full `testDurationMs` window is always observed. This is deliberate — exit-condition-based scoring lets sluggish tunes end early and score well.
+- The lateral tuner holds heading with `chassis.tunings().heading` during each shuttle, so tune angular before lateral.
+- Keep kI = 0 while tuning (see the [tutorial](../tutorials/auto-tuning#why-ki-stays-0-during-tuning)); add a small kI afterward only for steady-state error.
+- Don't run chassis motions while the tuner is running — it commands the drivetrain directly.

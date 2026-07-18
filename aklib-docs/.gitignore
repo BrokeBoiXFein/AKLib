@@ -4,6 +4,11 @@
 # Production
 /build
 
+# The path planner is copied into static/planner/ for publishing; keep the
+# canonical source in AKLib/planner/. Re-copy after editing the planner:
+#   cp ../AKLib/planner/aklib-planner.html static/planner/index.html
+#   cp ../AKLib/planner/field-*.png static/planner/
+
 # Generated files
 .docusaurus
 .cache-loader

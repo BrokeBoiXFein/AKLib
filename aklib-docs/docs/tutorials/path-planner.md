@@ -5,7 +5,11 @@ sidebar_position: 7
 
 # The AKLib Planner
 
-The planner (`AKLib/planner/aklib-planner.html` — just open it in a browser, no install) is a visual auton editor built specifically for AKLib: you chain *different kinds of motions* — straight drives, turns, point moves, boomerangs, and pure-pursuit curves — on a field map, and it exports the exact C++ calls.
+:::tip Open it now
+**[▶ Launch the Path Planner](pathname:///planner/)** (also in the top navbar) — it opens in a new tab, runs entirely in your browser, and saves your work locally. Or open `AKLib/planner/aklib-planner.html` from the repo directly; both are the same tool.
+:::
+
+The planner is a visual auton editor built specifically for AKLib: you chain *different kinds of motions* — straight drives, turns, point moves, boomerangs, and pure-pursuit curves — on a field map, and it exports the exact C++ calls.
 
 ## The idea
 

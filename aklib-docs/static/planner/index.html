@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AKLib Planner</title>
+<style>
+  /* Affogato 2502A theme — espresso/cream/caramel, from the team's design
+     system. Segment colors stay bright in both modes because they draw over
+     the (dark) field render; they echo the notebook's EDP process key. */
+  @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+  :root {
+    --font-display: 'Bricolage Grotesque', 'Hanken Grotesk', system-ui, sans-serif;
+    --font-body: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Consolas', ui-monospace, monospace;
+
+    --bg: #26170d; --panel: #2b1a10; --panel2: #3a2617;
+    --text: #f4e9d7; --muted: #c9a47a; --border: #4a2e1c;
+    --accent: #d19660; --accent-ink: #2b1a10; --accent2: #8fb8de;
+    /* segment colors ≈ EDP key: build-green, plan-yellow, program-blue,
+       test-pink, identify-red, caramel for actions */
+    --drive: #6fbf7c; --turn: #ecb93c; --point: #6fa8dc;
+    --pose: #d06a99; --path: #e06a78; --action: #d19660;
+    --field: #23282f; --tile: #4a2e1c;
+  }
+  [data-theme="light"] {
+    --bg: #f4e9d7; --panel: #fbf5ec; --panel2: #eadbc4;
+    --text: #241810; --muted: #6a5746; --border: #d8c4a8;
+    --accent: #b0703c; --accent-ink: #fffcf6; --accent2: #5894c8;
+    --field: #e8e2d4; --tile: #d8c4a8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-body);
+    background: var(--bg); color: var(--text);
+    display: grid; grid-template-columns: 300px 1fr 380px;
+    grid-template-rows: 52px 1fr; height: 100vh; overflow: hidden;
+  }
+  header {
+    grid-column: 1 / 4; display: flex; align-items: center; gap: 12px;
+    padding: 0 16px; background: var(--panel); border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 20px; letter-spacing: -.02em; font-family: var(--font-display); font-weight: 800; }
+  header h1 span { color: var(--accent); }
+  header .spacer { flex: 1; }
+  button, select {
+    background: var(--panel2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; border-color: var(--accent); }
+  /* ---------- left: segment list ---------- */
+  #left {
+    background: var(--panel); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #addRow { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 10px; border-bottom: 1px solid var(--border); }
+  #addRow button { font-size: 12px; padding: 6px 4px; }
+  #segList { flex: 1; overflow-y: auto; padding: 6px; }
+  .seg {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; margin: 3px 0; border-radius: 7px;
+    border: 1px solid var(--border); cursor: pointer; font-size: 13px;
+    background: var(--panel2);
+  }
+  .seg.selected { border-color: var(--accent); background: var(--bg); }
+  .seg .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .seg .lbl { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .seg .del { color: var(--muted); background: none; border: none; font-size: 14px; padding: 0 4px; }
+  .seg .del:hover { color: var(--path); }
+  /* ---------- middle: canvas ---------- */
+  #mid { display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 10px; }
+  canvas { background: var(--field); border: 1px solid var(--border); border-radius: 8px; cursor: crosshair; max-width: 100%; max-height: 100%; }
+  /* ---------- right: inspector + code ---------- */
+  #right {
+    background: var(--panel); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #inspector { padding: 12px; border-bottom: 1px solid var(--border); overflow-y: auto; max-height: 45%; }
+  #inspector h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 8px; }
+  .fieldrow { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 13px; }
+  .fieldrow label { flex: 1; color: var(--muted); }
+  .fieldrow input[type=number], .fieldrow input[type=text] {
+    width: 90px; background: var(--panel2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 5px; padding: 4px 8px; font-size: 13px;
+  }
+  .fieldrow input[type=checkbox] { accent-color: var(--accent); }
+  #inspector textarea {
+    width: 100%; min-height: 110px; margin: 6px 0;
+    background: var(--panel2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    font-family: var(--font-mono); font-size: 12px;
+    padding: 8px; resize: vertical;
+  }
+  #fieldToggle { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  #fieldToggle button { border: none; border-radius: 0; padding: 6px 12px; }
+  #fieldToggle button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  #codeWrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  #codeHead { display: flex; align-items: center; padding: 8px 12px; gap: 8px; border-bottom: 1px solid var(--border); }
+  #codeHead h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); flex: 1; }
+  #code {
+    flex: 1; width: 100%; resize: none; border: none; outline: none;
+    background: var(--bg); color: var(--text);
+    font-family: var(--font-mono); font-size: 12px;
+    padding: 12px; white-space: pre; overflow: auto;
+  }
+  #hint { padding: 8px 12px; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--border); }
+  /* Narrow windows: stack the three panes vertically so the field never
+     gets crushed. */
+  @media (max-width: 1020px) {
+    body {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto auto auto;
+      height: auto; overflow-y: auto;
+    }
+    header { grid-column: 1; flex-wrap: wrap; height: auto; padding: 8px 12px; }
+    #left { border-right: none; border-bottom: 1px solid var(--border); }
+    #segList { max-height: 180px; }
+    #mid { min-height: 60vw; }
+    canvas { width: min(92vw, 92vh); height: min(92vw, 92vh); }
+    #right { border-left: none; border-top: 1px solid var(--border); }
+    #code { min-height: 220px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AK<span>Lib</span> Planner</h1>
+  <input type="text" id="routeName" value="route1"
+         style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:13px;width:140px"
+         title="Route name (used in the generated function name)">
+  <div id="fieldToggle" title="Field setup">
+    <button id="btnMatch" class="active">Match</button>
+    <button id="btnSkills">Skills</button>
+  </div>
+  <button id="btnPlay" class="primary" title="Animate the robot along the predicted route">▶ Simulate</button>
+  <div class="spacer"></div>
+  <button id="btnUndoPt" title="Remove last pure-pursuit segment point">Undo PP point</button>
+  <button id="btnImport">Import JSON</button>
+  <button id="btnExport">Export JSON</button>
+  <button id="btnTheme">◐ Theme</button>
+  <input type="file" id="fileInput" accept=".json" style="display:none">
+</header>
+
+<div id="left">
+  <div id="addRow">
+    <button data-add="drive"    style="color:var(--drive)">+ Drive</button>
+    <button data-add="turn"     style="color:var(--turn)">+ Turn</button>
+    <button data-add="point"    style="color:var(--point)">+ To Point</button>
+    <button data-add="pose"     style="color:var(--pose)">+ Boomerang</button>
+    <button data-add="path"     style="color:var(--path)">+ Pure Pursuit</button>
+    <button data-add="action"   style="color:var(--action)">+ Action / Comment</button>
+    <button data-add="clear"    >Clear all</button>
+  </div>
+  <div id="segList"></div>
+</div>
+
+<div id="mid"><canvas id="cv" width="740" height="740"></canvas></div>
+
+<div id="right">
+  <div id="inspector"><h3>Inspector</h3><div id="inspBody">Select a segment.</div></div>
+  <div id="codeWrap">
+    <div id="codeHead"><h3>Generated C++</h3><button class="primary" id="btnCopy">Copy</button></div>
+    <textarea id="code" readonly spellcheck="false"></textarea>
+  </div>
+  <div id="hint">Drag points on the field · numbers snap to 0.5″ · pose propagates through segments · autosaves locally</div>
+</div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════════════════════
+// Model. Field frame: +x right, +y UP, heading deg math-standard (0 = +x,
+// CCW+) — identical to AKLib. Canvas y is flipped at draw time only.
+// ═══════════════════════════════════════════════════════════════════════════
+const FIELD = 144;                    // inches
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const S = cv.width / FIELD;           // px per inch
+
+const state = {
+  start: { x: 24, y: 12, theta: 90 },
+  segs: [],           // {type, ...params}
+  selected: -1,       // index into segs, or -1 = start pose
+  field: 'match',     // 'match' | 'skills' — which field render to show
+};
+
+// Official top-down field renders (files next to this HTML). If they're
+// missing, the planner falls back to a plain tile grid.
+// FIELD_INSET trims the perimeter wall off the render so the image's foam
+// surface maps exactly onto the 144" coordinate space.
+const FIELD_INSET = 0.017;   // measured: foam starts 68px into the 4000px render
+const fieldImgs = {
+  match:  Object.assign(new Image(), { src: 'field-match.png' }),
+  skills: Object.assign(new Image(), { src: 'field-skills.png' }),
+};
+fieldImgs.match.onload = () => draw();
+fieldImgs.skills.onload = () => draw();
+
+const DEFAULTS = {
+  maxSpeed: 1, minSpeed: 0, earlyExitRange: 0, timeoutMs: 0,
+  reverse: false, dlead: 0.6, lookahead: 10,
+};
+
+function snap(v) { return Math.round(v * 2) / 2; }
+function rad(d) { return d * Math.PI / 180; }
+function deg(r) { return r * 180 / Math.PI; }
+function wrapDeg(d) { d = ((d + 180) % 360 + 360) % 360; return d - 180; }
+function fmt(v, dp = 1) { return Number(v.toFixed(dp)); }
+
+// ── pose propagation: each segment maps an entry pose to an exit pose ──────
+function exitPose(seg, p) {
+  switch (seg.type) {
+    case 'drive': {
+      const d = seg.dist;
+      return { x: p.x + d * Math.cos(rad(p.theta)), y: p.y + d * Math.sin(rad(p.theta)), theta: p.theta };
+    }
+    case 'turn':
+      return { x: p.x, y: p.y, theta: seg.theta };
+    case 'point': {
+      let t = deg(Math.atan2(seg.y - p.y, seg.x - p.x));
+      if (seg.reverse) t = wrapDeg(t + 180);
+      return { x: seg.x, y: seg.y, theta: fmt(t) };
+    }
+    case 'pose':
+      return { x: seg.x, y: seg.y, theta: seg.theta };
+    case 'path': {
+      const pts = seg.pts;                      // control points incl. start
+      const a = pts[pts.length - 2], b = pts[pts.length - 1];
+      let t = deg(Math.atan2(b.y - a.y, b.x - a.x));
+      if (seg.reverse) t = wrapDeg(t + 180);
+      return { x: b.x, y: b.y, theta: fmt(t) };
+    }
+    case 'action':
+      return p;   // actions don't move the robot
+  }
+  return p;
+}
+function posesThrough() {                       // entry pose of each segment
+  const out = [ { ...state.start } ];
+  for (const s of state.segs) out.push(exitPose(s, out[out.length - 1]));
+  return out;                                    // out[i] = entry pose of segs[i]
+}
+
+// ── segment factories: appended ahead of the current end pose ──────────────
+function addSeg(type) {
+  const end = posesThrough().pop();
+  const h = rad(end.theta);
+  const inField = (v) => Math.max(6, Math.min(FIELD - 6, v));
+  const ahead = (d) => ({ x: snap(inField(end.x + d * Math.cos(h))),
+                          y: snap(inField(end.y + d * Math.sin(h))) });
+  let seg = null;
+  if (type === 'drive') seg = { type, dist: 24, ...structuredClone(DEFAULTS) };
+  if (type === 'turn')  seg = { type, theta: wrapDeg(end.theta + 90), ...structuredClone(DEFAULTS) };
+  if (type === 'point') seg = { type, ...ahead(24), ...structuredClone(DEFAULTS) };
+  if (type === 'pose')  seg = { type, ...ahead(30), theta: end.theta, ...structuredClone(DEFAULTS) };
+  if (type === 'path') {
+    const p0 = { x: end.x, y: end.y };
+    seg = { type, pts: [ p0, ahead(12), ahead(24), ahead(36) ],
+            ...structuredClone(DEFAULTS), turnK: 1.0, pathMaxSpeed: 1.0 };
+  }
+  if (type === 'action') {
+    // A code/comment block that runs at this point in the route — intaking,
+    // scoring, waits, prints... anything. Emitted verbatim into the auton.
+    seg = { type, code: '// runs here, between the motions above and below\nintake.move_voltage(12000);' };
+  }
+  if (!seg) return;
+  state.segs.push(seg);
+  state.selected = state.segs.length - 1;
+  refresh();
+}
+
+// Extend a pure-pursuit segment with another bezier piece (3 more points).
+function extendPath(seg) {
+  const pts = seg.pts;
+  const b = pts[pts.length - 1], a = pts[pts.length - 2];
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const n = Math.hypot(dx, dy) || 1;
+  const step = 14;
+  for (let i = 1; i <= 3; i++) {
+    pts.push({ x: snap(b.x + dx / n * step * i), y: snap(b.y + dy / n * step * i) });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Preview simulation (approximate!) — a unicycle chasing each target the way
+// AKLib's controllers do (cos-scaled drive, steering frozen inside the settle
+// radius), so curves on screen resemble curves on the field. Poses carry
+// heading so the animated playback can point the robot correctly.
+// ═══════════════════════════════════════════════════════════════════════════
+const SETTLE_RADIUS = 7;      // inches — matches aklib::Chassis
+function simulateSeek(from, targetFn, doneFn, reverse, settleAt, maxIter = 700) {
+  const pts = [];
+  let p = { ...from };
+  for (let i = 0; i < maxIter; i++) {
+    const t = targetFn(p);
+    if (doneFn(p)) break;
+    let want = Math.atan2(t.y - p.y, t.x - p.x);
+    if (reverse) want += Math.PI;
+    let err = Math.atan2(Math.sin(want - rad(p.theta)), Math.cos(want - rad(p.theta)));
+    // Like the real controller: stop steering when on top of the final point
+    // (atan2 destabilizes there), just close the remaining distance.
+    const settleDist = settleAt ? Math.hypot(settleAt.x - p.x, settleAt.y - p.y) : 1e9;
+    if (settleDist < SETTLE_RADIUS) err = 0;
+    else p.theta += deg(Math.max(-0.14, Math.min(0.14, err * 0.5)));
+    const v = 0.55 * Math.cos(err) * (reverse ? -1 : 1);
+    p.x += v * Math.cos(rad(p.theta));
+    p.y += v * Math.sin(rad(p.theta));
+    pts.push({ x: p.x, y: p.y, theta: p.theta });
+  }
+  return { pts, pose: p };
+}
+function previewFor(seg, entry) {
+  if (seg.type === 'drive') {
+    const e = exitPose(seg, entry);
+    return [ { x: entry.x, y: entry.y }, { x: e.x, y: e.y } ];
+  }
+  if (seg.type === 'point') {
+    return simulateSeek(entry, () => seg,
+      p => Math.hypot(seg.x - p.x, seg.y - p.y) < 1, seg.reverse, seg).pts;
+  }
+  if (seg.type === 'pose') {
+    const th = rad(seg.theta);
+    return simulateSeek(entry, p => {
+      const h = Math.hypot(seg.x - p.x, seg.y - p.y);
+      return { x: seg.x - h * seg.dlead * Math.cos(th),
+               y: seg.y - h * seg.dlead * Math.sin(th) };
+    }, p => Math.hypot(seg.x - p.x, seg.y - p.y) < 1, seg.reverse, seg).pts;
+  }
+  if (seg.type === 'path') return bezierPolyline(seg.pts);
+  return [];
+}
+function bezierPolyline(pts) {
+  const out = [];
+  const nSeg = Math.floor((pts.length - 1) / 3);
+  for (let s = 0; s < nSeg; s++) {
+    const [p0, c0, c1, p1] = [pts[s*3], pts[s*3+1], pts[s*3+2], pts[s*3+3]];
+    for (let i = 0; i <= 32; i++) {
+      const t = i / 32, u = 1 - t;
+      out.push({
+        x: u*u*u*p0.x + 3*u*u*t*c0.x + 3*u*t*t*c1.x + t*t*t*p1.x,
+        y: u*u*u*p0.y + 3*u*u*t*c0.y + 3*u*t*t*c1.y + t*t*t*p1.y,
+      });
+    }
+  }
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Route trace + animated playback: turn every segment into timestamped poses,
+// then drive a ghost robot through them in (approximately) real time.
+// Speed model is deliberately simple — top speed / turn rate scaled by each
+// segment's maxSpeed — so treat the clock as a planning estimate, not a
+// stopwatch. Actions pause for any pros::delay(...) found in their code.
+// ═══════════════════════════════════════════════════════════════════════════
+const SIM_TOP_SPEED = 55;   // in/s at maxSpeed = 1 (typical 450rpm 3.25" drive)
+const SIM_TURN_RATE = 300;  // deg/s at maxSpeed = 1
+
+function buildTrace() {
+  const trace = [];
+  let t = 0;
+  const push = (pose, dt) => { t += dt; trace.push({ ...pose, t }); };
+  const poses = posesThrough();
+  trace.push({ ...poses[0], t: 0 });
+
+  state.segs.forEach((seg, i) => {
+    const entry = poses[i];
+    const exit = poses[i + 1];
+    const maxS = Math.max(0.15, seg.maxSpeed ?? 1);
+
+    if (seg.type === 'drive') {
+      const d = Math.abs(seg.dist);
+      const steps = Math.max(2, Math.ceil(d));
+      for (let k = 1; k <= steps; k++) {
+        push({ x: entry.x + (exit.x - entry.x) * k / steps,
+               y: entry.y + (exit.y - entry.y) * k / steps,
+               theta: entry.theta },
+             (d / steps) / (SIM_TOP_SPEED * maxS));
+      }
+    } else if (seg.type === 'turn') {
+      const delta = wrapDeg(exit.theta - entry.theta);
+      const steps = Math.max(2, Math.ceil(Math.abs(delta) / 5));
+      for (let k = 1; k <= steps; k++) {
+        push({ x: entry.x, y: entry.y, theta: entry.theta + delta * k / steps },
+             (Math.abs(delta) / steps) / (SIM_TURN_RATE * maxS));
+      }
+    } else if (seg.type === 'point' || seg.type === 'pose') {
+      const pts = previewFor(seg, entry);
+      let prev = entry;
+      for (const q of pts) {
+        const step = Math.hypot(q.x - prev.x, q.y - prev.y);
+        // simulateSeek tracks theta in degrees (same as planner poses)
+        push({ x: q.x, y: q.y, theta: q.theta ?? prev.theta },
+             Math.max(step / (SIM_TOP_SPEED * maxS), 0.004));
+        prev = q;
+      }
+      push({ ...exit }, 0.05);   // settle beat
+    } else if (seg.type === 'path') {
+      const line = bezierPolyline(seg.pts);
+      const pathS = Math.max(0.15, Math.min(maxS, seg.pathMaxSpeed ?? 1));
+      for (let k = 1; k < line.length; k++) {
+        const a = line[k - 1], b = line[k];
+        let heading = deg(Math.atan2(b.y - a.y, b.x - a.x));
+        if (seg.reverse) heading = wrapDeg(heading + 180);
+        push({ x: b.x, y: b.y, theta: heading },
+             Math.hypot(b.x - a.x, b.y - a.y) / (SIM_TOP_SPEED * pathS));
+      }
+    } else if (seg.type === 'action') {
+      // pause for any pros::delay(ms) written in the action, min 0.25 s
+      let ms = 0;
+      for (const m of (seg.code || '').matchAll(/delay\s*\(\s*(\d+)/g)) ms += +m[1];
+      push({ ...entry }, Math.max(ms / 1000, 0.25));
+    }
+  });
+  return trace;
+}
+
+let sim = null;   // { trace, t0, timer, scene, idx }
+function stopSim() {
+  if (!sim) return;
+  clearInterval(sim.timer);
+  sim = null;
+  document.getElementById('btnPlay').textContent = playLabel();
+  draw();
+}
+function playLabel() {
+  const total = state.segs.length ? buildTrace().at(-1).t : 0;
+  return total > 0 ? `▶ Simulate ≈${total.toFixed(1)}s` : '▶ Simulate';
+}
+function startSim() {
+  if (!state.segs.length) return;
+  const trace = buildTrace();
+  draw();                                     // render the static scene once...
+  const scene = document.createElement('canvas');
+  scene.width = cv.width; scene.height = cv.height;
+  scene.getContext('2d').drawImage(cv, 0, 0); // ...and cache it for cheap frames
+  sim = { trace, t0: performance.now(), timer: 0, scene, idx: 0 };
+  const btn = document.getElementById('btnPlay');
+  const frame = () => {
+    if (!sim) return;
+    const t = (performance.now() - sim.t0) / 1000;
+    const total = sim.trace.at(-1).t;
+    if (t >= total) { stopSim(); return; }
+    // advance the trace pointer (monotonic — no per-frame full search)
+    while (sim.idx < sim.trace.length - 1 && sim.trace[sim.idx].t < t) sim.idx++;
+    const pose = sim.trace[sim.idx];
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(sim.scene, 0, 0);
+    drawRobot(pose, cssVar('--accent2'));
+    btn.textContent = `■ Stop  ${t.toFixed(1)}s / ${total.toFixed(1)}s`;
+  };
+  sim.timer = setInterval(frame, 33);          // ~30 fps; robust when rAF throttles
+  frame();
+}
+document.getElementById('btnPlay').onclick = () => (sim ? stopSim() : startSim());
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Drawing
+// ═══════════════════════════════════════════════════════════════════════════
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const X = (x) => x * S;
+const Y = (y) => cv.height - y * S;      // flip: +y is up on the field
+
+function draw() {
+  ctx.clearRect(0, 0, cv.width, cv.height);
+
+  // field render (Match/Skills), with the perimeter wall cropped off so the
+  // foam surface aligns with the 144" coordinate space
+  const img = fieldImgs[state.field];
+  if (img && img.complete && img.naturalWidth > 0) {
+    const inset = FIELD_INSET * img.naturalWidth;
+    ctx.drawImage(img, inset, inset,
+                  img.naturalWidth - 2 * inset, img.naturalHeight - 2 * inset,
+                  0, 0, cv.width, cv.height);
+    // faint tile grid on top so coordinates stay readable
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 1;
+    for (let i = 1; i < 6; i++) {
+      const v = i * 24 * S;
+      ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, cv.height); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, v); ctx.lineTo(cv.width, v); ctx.stroke();
+    }
+  } else {
+    // fallback: plain tile grid (field images not found next to the HTML)
+    ctx.strokeStyle = cssVar('--tile'); ctx.lineWidth = 1;
+    for (let i = 0; i <= 6; i++) {
+      const v = i * 24 * S;
+      ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, cv.height); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, v); ctx.lineTo(cv.width, v); ctx.stroke();
+    }
+  }
+  ctx.fillStyle = cssVar('--muted'); ctx.font = '10px sans-serif';
+  ctx.fillText('(0,0)', 4, cv.height - 5);
+  ctx.fillText('x →', cv.width - 26, cv.height - 5);
+  ctx.fillText('y ↑', 4, 12);
+
+  const poses = posesThrough();
+  const colors = { drive: cssVar('--drive'), turn: cssVar('--turn'),
+                   point: cssVar('--point'), pose: cssVar('--pose'),
+                   path: cssVar('--path'), action: cssVar('--action') };
+
+  // segment previews
+  state.segs.forEach((seg, i) => {
+    const entry = poses[i];
+    const line = previewFor(seg, entry);
+    ctx.strokeStyle = colors[seg.type];
+    ctx.lineWidth = i === state.selected ? 3.5 : 2;
+    ctx.globalAlpha = i === state.selected ? 1 : 0.75;
+    if (line.length > 1) {
+      ctx.beginPath(); ctx.moveTo(X(line[0].x), Y(line[0].y));
+      for (const q of line) ctx.lineTo(X(q.x), Y(q.y));
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    // turn marker: arrow showing the new front direction
+    if (seg.type === 'turn') drawArrow(poses[i + 1], colors.turn, 12);
+    // boomerang: arrow showing the arrival heading at the target
+    if (seg.type === 'pose') drawArrow({ x: seg.x, y: seg.y, theta: seg.theta },
+                                       colors.pose, 10);
+    // action: badge marker where the code runs
+    if (seg.type === 'action') {
+      const at = poses[i];
+      ctx.fillStyle = colors.action;
+      ctx.beginPath(); ctx.arc(X(at.x), Y(at.y), 9, 0, 7); ctx.fill();
+      ctx.strokeStyle = cssVar('--bg'); ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = '#2b1a10'; ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('ƒ', X(at.x), Y(at.y) + 0.5);
+      ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+    }
+    // path control-point handles
+    if (seg.type === 'path' && i === state.selected) {
+      ctx.strokeStyle = colors.path; ctx.globalAlpha = 0.35; ctx.lineWidth = 1;
+      const pts = seg.pts;
+      const nSeg = Math.floor((pts.length - 1) / 3);
+      for (let s = 0; s < nSeg; s++) {
+        ctx.beginPath(); ctx.moveTo(X(pts[s*3].x), Y(pts[s*3].y));
+        ctx.lineTo(X(pts[s*3+1].x), Y(pts[s*3+1].y)); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(X(pts[s*3+3].x), Y(pts[s*3+3].y));
+        ctx.lineTo(X(pts[s*3+2].x), Y(pts[s*3+2].y)); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      pts.forEach((q, k) => drawHandle(q, k % 3 === 0 ? colors.path : cssVar('--muted'), k % 3 !== 0));
+    }
+    // draggable endpoint
+    const drag = dragTarget(seg, poses[i]);
+    if (drag && seg.type !== 'path') drawHandle(drag, colors[seg.type], false);
+  });
+
+  // robot at the start pose + a big arrow showing the FINAL front direction
+  drawRobot(poses[0], cssVar('--accent'));
+  const last = poses[poses.length - 1];
+  if (state.segs.length) drawArrow(last, cssVar('--accent2'), 14);
+}
+function drawHandle(q, color, small) {
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(X(q.x), Y(q.y), small ? 4 : 6, 0, 7); ctx.fill();
+  ctx.strokeStyle = cssVar('--bg'); ctx.lineWidth = 1.5; ctx.stroke();
+}
+/** Arrow from p along p.theta, `lenIn` inches long, with a filled head —
+ *  everywhere you see one of these, it points where the robot's FRONT faces. */
+function drawArrow(p, color, lenIn) {
+  const a = rad(p.theta);
+  const x0 = X(p.x), y0 = Y(p.y);
+  const x1 = X(p.x + lenIn * Math.cos(a)), y1 = Y(p.y + lenIn * Math.sin(a));
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  // head (canvas-space angle: y is flipped, so recompute from pixels)
+  const ca = Math.atan2(y1 - y0, x1 - x0);
+  const HEAD = 11;
+  ctx.beginPath();
+  ctx.moveTo(x1 + Math.cos(ca) * 4, y1 + Math.sin(ca) * 4);
+  ctx.lineTo(x1 - Math.cos(ca - 0.5) * HEAD, y1 - Math.sin(ca - 0.5) * HEAD);
+  ctx.lineTo(x1 - Math.cos(ca + 0.5) * HEAD, y1 - Math.sin(ca + 0.5) * HEAD);
+  ctx.closePath(); ctx.fill();
+}
+function drawRobot(p, color) {
+  const r = 9;                                 // ~18" robot footprint
+  ctx.save();
+  ctx.translate(X(p.x), Y(p.y));
+  ctx.rotate(-rad(p.theta));                   // canvas y-flip → negate
+  ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+  ctx.strokeRect(-r * S / 2, -r * S / 2, r * S, r * S);
+  // front-face marker: bold edge + filled arrow poking out of the front
+  ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(r * S / 2, -r * S / 2); ctx.lineTo(r * S / 2, r * S / 2); ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(r * S / 2 + 14, 0);               // arrow tip, ahead of the robot
+  ctx.lineTo(r * S / 2 + 2, -8);
+  ctx.lineTo(r * S / 2 + 2, 8);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+  drawHandle(p, color, false);
+}
+
+// what the mouse can drag for each segment (except path — handled per-point)
+function dragTarget(seg, entry) {
+  if (seg.type === 'drive') return exitPose(seg, entry);
+  if (seg.type === 'turn') return null;
+  if (seg.type === 'point' || seg.type === 'pose') return { x: seg.x, y: seg.y };
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Mouse interaction
+// ═══════════════════════════════════════════════════════════════════════════
+let dragging = null;   // {kind:'seg'|'pathpt'|'start', idx, ptIdx}
+cv.addEventListener('mousedown', (e) => {
+  const m = mouseField(e);
+  const poses = posesThrough();
+  // start pose handle
+  if (dist(m, state.start) < 3) { dragging = { kind: 'start' }; state.selected = -1; refresh(); return; }
+  // selected path's control points first
+  const sel = state.segs[state.selected];
+  if (sel && sel.type === 'path') {
+    for (let k = sel.pts.length - 1; k >= 0; k--) {
+      if (dist(m, sel.pts[k]) < 3) { dragging = { kind: 'pathpt', idx: state.selected, ptIdx: k }; return; }
+    }
+  }
+  // segment endpoints (topmost last)
+  for (let i = state.segs.length - 1; i >= 0; i--) {
+    const t = dragTarget(state.segs[i], poses[i]);
+    if (t && dist(m, t) < 3) { dragging = { kind: 'seg', idx: i }; state.selected = i; refresh(); return; }
+    if (state.segs[i].type === 'path') {
+      const end = state.segs[i].pts[state.segs[i].pts.length - 1];
+      if (dist(m, end) < 3) { state.selected = i; refresh(); return; }
+    }
+  }
+});
+cv.addEventListener('mousemove', (e) => {
+  if (!dragging) return;
+  const m = mouseField(e);
+  m.x = snap(Math.max(0, Math.min(FIELD, m.x)));
+  m.y = snap(Math.max(0, Math.min(FIELD, m.y)));
+  if (dragging.kind === 'start') { state.start.x = m.x; state.start.y = m.y; }
+  if (dragging.kind === 'pathpt') {
+    const seg = state.segs[dragging.idx];
+    // first point of a path is glued to the previous pose — not draggable
+    if (dragging.ptIdx > 0) { seg.pts[dragging.ptIdx] = m; }
+  }
+  if (dragging.kind === 'seg') {
+    const seg = state.segs[dragging.idx];
+    const entry = posesThrough()[dragging.idx];
+    if (seg.type === 'drive') {
+      // project the mouse onto the heading line → signed distance
+      const h = rad(entry.theta);
+      seg.dist = snap((m.x - entry.x) * Math.cos(h) + (m.y - entry.y) * Math.sin(h));
+    } else { seg.x = m.x; seg.y = m.y; }
+  }
+  refresh(false);
+});
+window.addEventListener('mouseup', () => { if (dragging) { dragging = null; refresh(); } });
+function mouseField(e) {
+  const r = cv.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * (cv.width / r.width) / S,
+           y: (cv.height - (e.clientY - r.top) * (cv.height / r.height)) / S };
+}
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Segment list + inspector
+// ═══════════════════════════════════════════════════════════════════════════
+const NAMES = { drive: 'Drive', turn: 'Turn', point: 'Move to point',
+                pose: 'Boomerang', path: 'Pure pursuit', action: 'Action' };
+function renderList() {
+  const el = document.getElementById('segList');
+  el.innerHTML = '';
+  const mk = (label, color, idx, deletable) => {
+    const div = document.createElement('div');
+    div.className = 'seg' + (state.selected === idx ? ' selected' : '');
+    div.innerHTML = `<span class="dot" style="background:${color}"></span>
+                     <span class="lbl">${label}</span>` +
+                    (deletable ? '<button class="del" title="Delete">✕</button>' : '');
+    div.onclick = () => { state.selected = idx; refresh(); };
+    if (deletable) div.querySelector('.del').onclick = (e) => {
+      e.stopPropagation(); state.segs.splice(idx, 1);
+      state.selected = Math.min(state.selected, state.segs.length - 1); refresh();
+    };
+    el.appendChild(div);
+  };
+  mk(`Start pose (${fmt(state.start.x)}, ${fmt(state.start.y)}, ${fmt(state.start.theta)}°)`,
+     cssVar('--accent'), -1, false);
+  const poses = posesThrough();
+  state.segs.forEach((s, i) => {
+    let detail = '';
+    if (s.type === 'drive') detail = `${s.dist}″`;
+    if (s.type === 'turn') detail = `→ ${fmt(s.theta)}°`;
+    if (s.type === 'point' || s.type === 'pose') detail = `(${fmt(s.x)}, ${fmt(s.y)})`;
+    if (s.type === 'path') detail = `${Math.floor((s.pts.length - 1) / 3)} curve(s)`;
+    if (s.type === 'action') {
+      const first = (s.code || '').split('\n').find(l => l.trim()) || '(empty)';
+      detail = `ƒ ${first.trim().slice(0, 26)}`;
+    }
+    mk(`${i + 1}. ${NAMES[s.type]} ${detail}`, cssVar(`--${s.type}`), i, true);
+  });
+}
+
+function renderInspector() {
+  const body = document.getElementById('inspBody');
+  body.innerHTML = '';
+  const row = (label, get, set, opts = {}) => {
+    const div = document.createElement('div');
+    div.className = 'fieldrow';
+    if (opts.bool) {
+      div.innerHTML = `<label>${label}</label>`;
+      const inp = document.createElement('input');
+      inp.type = 'checkbox'; inp.checked = get();
+      inp.onchange = () => { set(inp.checked); refresh(); };
+      div.appendChild(inp);
+    } else {
+      div.innerHTML = `<label>${label}</label>`;
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.step = opts.step ?? 0.5; inp.value = get();
+      inp.onchange = () => { set(parseFloat(inp.value) || 0); refresh(); };
+      div.appendChild(inp);
+    }
+    body.appendChild(div);
+  };
+  if (state.selected === -1) {
+    row('start x (in)', () => state.start.x, v => state.start.x = v);
+    row('start y (in)', () => state.start.y, v => state.start.y = v);
+    row('start heading (°)', () => state.start.theta, v => state.start.theta = v, { step: 5 });
+    return;
+  }
+  const s = state.segs[state.selected];
+  if (!s) { body.textContent = 'Select a segment.'; return; }
+  if (s.type === 'action') {
+    const note = document.createElement('div');
+    note.className = 'fieldrow';
+    note.innerHTML = '<label>C++ that runs at this point in the route — intake, score, wait, comments...</label>';
+    body.appendChild(note);
+    const ta = document.createElement('textarea');
+    ta.value = s.code || '';
+    ta.spellcheck = false;
+    ta.addEventListener('input', () => { s.code = ta.value; draw();
+      document.getElementById('code').value = genCode(); save(); });
+    ta.addEventListener('change', () => refresh());
+    body.appendChild(ta);
+    return;   // actions have no motion params
+  }
+  if (s.type === 'drive') row('distance (in, − = back)', () => s.dist, v => s.dist = v);
+  if (s.type === 'turn') row('target heading (°)', () => s.theta, v => s.theta = v, { step: 5 });
+  if (s.type === 'point' || s.type === 'pose') {
+    row('x (in)', () => s.x, v => s.x = v);
+    row('y (in)', () => s.y, v => s.y = v);
+  }
+  if (s.type === 'pose') {
+    row('arrival heading (°)', () => s.theta, v => s.theta = v, { step: 5 });
+    row('dlead (0–1)', () => s.dlead, v => s.dlead = v, { step: 0.05 });
+  }
+  if (s.type === 'path') {
+    row('lookahead (in)', () => s.lookahead, v => s.lookahead = v);
+    row('path max speed (0–1)', () => s.pathMaxSpeed, v => s.pathMaxSpeed = v, { step: 0.05 });
+    row('turnK (corner slowdown)', () => s.turnK, v => s.turnK = v, { step: 0.1 });
+    const btn = document.createElement('button');
+    btn.textContent = '+ Extend path (add curve)';
+    btn.style.margin = '6px 0';
+    btn.onclick = () => { extendPath(s); refresh(); };
+    body.appendChild(btn);
+  }
+  if (s.type !== 'turn' && s.type !== 'path') row('reverse (drive backwards)', () => s.reverse, v => s.reverse = v, { bool: true });
+  if (s.type === 'path') row('reverse (follow backwards)', () => s.reverse, v => s.reverse = v, { bool: true });
+  row('max speed (0–1)', () => s.maxSpeed, v => s.maxSpeed = v, { step: 0.05 });
+  row('min speed (chaining)', () => s.minSpeed, v => s.minSpeed = v, { step: 0.05 });
+  row('early exit range (in/°)', () => s.earlyExitRange, v => s.earlyExitRange = v);
+  row('timeout (ms, 0 = default)', () => s.timeoutMs, v => s.timeoutMs = v, { step: 100 });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// C++ code generation
+// ═══════════════════════════════════════════════════════════════════════════
+function genParams(s, extra = {}) {
+  const parts = [];
+  // ORDER MATTERS: must match MotionParams declaration order.
+  if (s.maxSpeed !== 1) parts.push(`.maxSpeed = ${s.maxSpeed}`);
+  if (s.minSpeed > 0) parts.push(`.minSpeed = ${s.minSpeed}`);
+  if (s.reverse) parts.push(`.reverse = true`);
+  if (s.earlyExitRange > 0) parts.push(`.earlyExitRange = ${s.earlyExitRange}`);
+  if (s.timeoutMs > 0) parts.push(`.timeoutMs = ${s.timeoutMs}`);
+  if (extra.dlead !== undefined && extra.dlead !== 0.6) parts.push(`.dlead = ${extra.dlead}`);
+  if (extra.lookahead !== undefined && extra.lookahead !== 10) parts.push(`.lookahead = ${extra.lookahead}`);
+  return parts.length ? `, {${parts.join(', ')}}` : '';
+}
+function genCode() {
+  const name = (document.getElementById('routeName').value || 'route1')
+                 .replace(/[^A-Za-z0-9_]/g, '_');
+  const L = [];
+  L.push('// ── Generated by AKLib Planner ──────────────────────────────');
+  L.push('// Paste into your project. Requires: #include "aklib/api.hpp"');
+  L.push('// and the `chassis` object from robot_config.cpp.');
+  L.push('');
+  let pathN = 0;
+  const pathDecls = [];
+  const body = [];
+  body.push(`    chassis.setPose(${fmt(state.start.x)}, ${fmt(state.start.y)}, ${fmt(state.start.theta)});`);
+  state.segs.forEach((s) => {
+    if (s.type === 'action') {
+      for (const line of (s.code || '').split('\n')) body.push(`    ${line}`);
+      return;
+    }
+    if (s.type === 'drive') body.push(`    chassis.driveDistance(${fmt(s.dist)}${genParams(s)});`);
+    if (s.type === 'turn') body.push(`    chassis.turnToHeading(${fmt(s.theta)}${genParams(s)});`);
+    if (s.type === 'point') body.push(`    chassis.moveToPoint(${fmt(s.x)}, ${fmt(s.y)}${genParams(s)});`);
+    if (s.type === 'pose') body.push(`    chassis.moveToPose(${fmt(s.x)}, ${fmt(s.y)}, ${fmt(s.theta)}${genParams(s, { dlead: s.dlead })});`);
+    if (s.type === 'path') {
+      pathN++;
+      const ptsStr = s.pts.map(q => `{${fmt(q.x)}, ${fmt(q.y)}}`).join(', ');
+      const opts = [];
+      if (s.pathMaxSpeed !== 1) opts.push(`.maxSpeed = ${s.pathMaxSpeed}`);
+      if (s.turnK !== 1) opts.push(`.turnK = ${s.turnK}`);
+      pathDecls.push(`static aklib::Path ${name}_path${pathN} = aklib::Path::bezier({\n    ${ptsStr},\n}${opts.length ? `, {${opts.join(', ')}}` : ''});`);
+      body.push(`    chassis.follow(${name}_path${pathN}${genParams(s, { lookahead: s.lookahead })});`);
+    }
+  });
+  for (const d of pathDecls) L.push(d);
+  if (pathDecls.length) L.push('');
+  L.push(`void ${name}() {`);
+  L.push(...body);
+  L.push('}');
+  return L.join('\n');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Persistence + wiring
+// ═══════════════════════════════════════════════════════════════════════════
+function save() {
+  localStorage.setItem('aklib-planner', JSON.stringify({
+    start: state.start, segs: state.segs, field: state.field,
+    name: document.getElementById('routeName').value,
+  }));
+}
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem('aklib-planner'));
+    if (d && d.segs) {
+      state.start = d.start; state.segs = d.segs;
+      if (d.field) state.field = d.field;
+      if (d.name) document.getElementById('routeName').value = d.name;
+    }
+  } catch (_) {}
+}
+function setField(which) {
+  state.field = which;
+  document.getElementById('btnMatch').classList.toggle('active', which === 'match');
+  document.getElementById('btnSkills').classList.toggle('active', which === 'skills');
+  refresh(false);
+}
+document.getElementById('btnMatch').onclick = () => setField('match');
+document.getElementById('btnSkills').onclick = () => setField('skills');
+function refresh(full = true) {
+  stopSim();   // any edit invalidates a running simulation
+  // keep every path's first point glued to its entry pose
+  const poses = posesThrough();
+  state.segs.forEach((s, i) => {
+    if (s.type === 'path') s.pts[0] = { x: poses[i].x, y: poses[i].y };
+  });
+  draw();
+  if (full) { renderList(); renderInspector(); }
+  document.getElementById('code').value = genCode();
+  document.getElementById('btnPlay').textContent = playLabel();
+  save();
+}
+
+document.querySelectorAll('#addRow button').forEach(b => {
+  b.onclick = () => {
+    const t = b.dataset.add;
+    if (t === 'clear') {
+      if (confirm('Delete all segments?')) { state.segs = []; state.selected = -1; refresh(); }
+    } else addSeg(t);
+  };
+});
+document.getElementById('btnUndoPt').onclick = () => {
+  const s = state.segs[state.selected];
+  if (s && s.type === 'path' && s.pts.length > 4) { s.pts.splice(-3, 3); refresh(); }
+};
+document.getElementById('btnCopy').onclick = async () => {
+  await navigator.clipboard.writeText(document.getElementById('code').value);
+  const b = document.getElementById('btnCopy');
+  b.textContent = 'Copied ✓'; setTimeout(() => b.textContent = 'Copy', 1200);
+};
+document.getElementById('btnExport').onclick = () => {
+  const blob = new Blob([JSON.stringify({ start: state.start, segs: state.segs,
+                                          field: state.field }, null, 2)],
+                        { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (document.getElementById('routeName').value || 'route') + '.aklib.json';
+  a.click();
+};
+document.getElementById('btnImport').onclick = () => document.getElementById('fileInput').click();
+document.getElementById('fileInput').onchange = (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  f.text().then(txt => {
+    try {
+      const d = JSON.parse(txt);
+      if (d.start && d.segs) {
+        state.start = d.start; state.segs = d.segs; state.selected = -1;
+        if (d.field) setField(d.field);
+        refresh();
+      } else alert('Not an AKLib Planner file.');
+    } catch (_) { alert('Could not parse that file.'); }
+  });
+};
+document.getElementById('btnTheme').onclick = () => {
+  const r = document.documentElement;
+  const next = r.getAttribute('data-theme') === 'light' ? '' : 'light';
+  if (next) r.setAttribute('data-theme', next); else r.removeAttribute('data-theme');
+  localStorage.setItem('aklib-planner-theme', next);
+  draw();
+};
+document.getElementById('routeName').addEventListener('input', () => refresh(false));
+if (localStorage.getItem('aklib-planner-theme') === 'light') {
+  document.documentElement.setAttribute('data-theme', 'light');
+}
+
+load();
+setField(state.field);
+refresh();
+</script>
+</body>
+</html>

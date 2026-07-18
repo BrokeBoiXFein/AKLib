@@ -55,6 +55,9 @@ const config = {
         title: 'AKLib',
         items: [
           {type: 'docSidebar', sidebarId: 'docs', position: 'left', label: 'Docs'},
+          // Static tool page in static/planner/ — pathname:// bypasses the
+          // SPA router and prepends baseUrl. Opens in a new tab.
+          {to: 'pathname:///planner/', label: 'Path Planner', position: 'left', target: '_blank'},
           {href: 'https://pros.cs.purdue.edu/v5/pros-4/index.html', label: 'PROS', position: 'right'},
         ],
       },
@@ -67,6 +70,7 @@ const config = {
               {label: 'Quickstart', to: '/getting-started/quickstart'},
               {label: 'Tutorials', to: '/tutorials/first-auton'},
               {label: 'API Reference', to: '/api/chassis'},
+              {label: 'Path Planner', to: 'pathname:///planner/'},
             ],
           },
           {
